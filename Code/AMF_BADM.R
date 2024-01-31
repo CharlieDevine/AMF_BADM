@@ -35,6 +35,10 @@ bif = amf_download_bif(user_id = 'cjdevine',
 # Read BADM from BIF file
 badm = amf_read_bif(file = bif)
 
+# ---------------------------------------------------------------------------------------
+
+# ------------------- Variables by site
+
 # Define the list of specific variables to be considered
 selected_variables = c('LAI', 'BASAL_AREA', 'TREES_NUM', 'AG_BIOMASS_TREE', 
                        'AG_LIT_PROD_TOT', 'AG_PROD_TREE', 'BIOMASS_N', 
@@ -98,7 +102,7 @@ map.amf.variable = function(variable.name) {
   
   var.map
   
-  ggsave(filename = paste0(plots.fp, '/', variable.name, '_BADM_Map.png'),
+  ggsave(filename = paste0(plots.fp, '/SiteVariables/', variable.name, '_BADM_Map.png'),
          plot = var.map,
          width = 6, height = 5)
 }
@@ -109,25 +113,76 @@ for (i in 1 : length(selected_variables)) {
   map.amf.variable(selected_variables[i])
 }
 
+
 # ---------------------------------------------------------------------------------------
 
-# ------------------- US-NR1
+# ------------------- Disturbance history
 
-# Subset US-NR1 info from BADM
-nr1.badm = badm[badm$SITE_ID == 'US-NR1',]
+# Subset BADM by sites which contain disturbance history information (VARIABLES containing "DM")
+badm.dm = badm[grep('DM', badm$VARIABLE),]
 
-# Get list of unique variables 
-nr1.badm.vars = unique(nr1.badm$VARIABLE)
+# Filter out extra information - we only need specific DM categories 
+badm.dm = badm.dm[grep('DM_DATE|DM_GENERAL|DM_COMMENT', badm.dm$VARIABLE, invert = TRUE),]
 
-# Subset by variable and date
-nr1.badm.vars.dates = as.data.frame(nr1.badm[grepl('DATE$', nr1.badm$VARIABLE),])
+# Get unique DM_VARIABLE names
+dm.vars = unique(badm.dm$VARIABLE)
 
-library(flextable)
-library(ftExtra)
+# Exclude 'DM_SURF' (percentage of footprint area affected by disturbance event) from dm.vars
+dm.vars = dm.vars[grep('DM_SURF', dm.vars, invert = TRUE)]
 
-# Create summary table
-table = flextable(nr1.badm.vars.dates[,c(3,5)]) %>%
-  merge_v(j = c(1,2))
+# Mapping function (requires 'dm.variable.name')
+map.dm.function = function(dm.variable.name) {
+  
+  # Set disturbance (DM) variable 
+  dm.var = dm.variable.name
+  
+  # Filter BADM using specified DM variable
+  dm = badm.dm[badm.dm$VARIABLE %in% dm.var,]
+  
+  # Filter site locations (all AMF sites) to include only those which contain the specified DM variable
+  dm.site.locs = amf.site.locs[match(dm$SITE_ID, amf.site.locs$SiteID),]
+  
+  # Bind columns from filtered site lon/lat coordinates to the filtered DM data frame, select USA-only instances
+  dm = cbind(dm, dm.site.locs[,2:4])
+  dm = dm[dm$Country == 'USA',]
+  dm$lon = as.numeric(dm$lon)
+  dm$lat = as.numeric(dm$lat)
+  
+  # Filter AMF site locations for USA-only sites
+  usa.locs = amf.site.locs[amf.site.locs$Country == 'USA',]
+  usa.locs$lon = as.numeric(usa.locs$lon)
+  usa.locs$lat = as.numeric(usa.locs$lat)
+  
+  # Get state polygons
+  state.polys = map_data('state')
+  
+  # Generate map for selected DM variable symbolizing specific disturbance categories
+  dm.map = ggplot() +
+    geom_polygon(data = state.polys, aes(x = long, y = lat, group = group), fill = NA, color = 'black') +
+    geom_point(data = dm, aes(x = lon, y = lat, fill = DATAVALUE, shape = DATAVALUE), color = 'black', alpha = 0.5, size = 10) +
+    scale_shape_manual(values = c(21,22,23,24)) +
+    geom_point(data = usa.locs, aes(x = lon, y = lat), col = 'black', size = 2) +
+    coord_map(xlim = c(-125,-68), ylim = c(25,49)) +
+    theme_void() +
+    ggtitle(dm.var) +
+    theme(axis.title = element_blank(),
+          plot.title = element_text(size = 25, face = 'bold', hjust = 0.5),
+          legend.title = element_blank(),
+          legend.position = 'bottom',
+          #legend.position = c(0,0),
+          #legend.justification = c('left','bottom'),
+          #legend.box.just = 'right',
+          legend.text = element_text(size = 10),
+          plot.background = element_rect(fill = 'white', color = 'white'))
+  
+  dm.map
+  
+  ggsave(filename =  paste0(plots.fp, '/Disturbance/', dm.variable.name, '_BADM_Map.png'),
+         dm.map,
+         width = 8, height = 5)
+}
 
 
-
+for (i in 1 : length(dm.vars)) {
+  map.dm.function(dm.vars[i])
+}
