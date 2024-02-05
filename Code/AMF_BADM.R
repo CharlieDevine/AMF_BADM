@@ -186,3 +186,51 @@ map.dm.function = function(dm.variable.name) {
 for (i in 1 : length(dm.vars)) {
   map.dm.function(dm.vars[i])
 }
+
+# ---------------------------------------------------------------------------------------
+
+# ------------------- Land cover at arctic/boreal flux sites
+
+# Create data frame with IGBP Class IDs and Names
+igbp.class = data.frame('ClassID' = c('BSV',
+                                      'CRO',
+                                      'CSH',
+                                      'CVM',
+                                      'DBF',
+                                      'DNF',
+                                      'EBF',
+                                      'ENF',
+                                      'GRA',
+                                      'MF',
+                                      'OSH',
+                                      'SAV',
+                                      'SNO',
+                                      'URB',
+                                      'WAT',
+                                      'WET',
+                                      'WSA'),
+                        'ClassName' = c('Barren/Sparse Vegetation',
+                                        'Croplands',
+                                        'Closed Shrublands',
+                                        'Cropland/Natural Vegetation Mosaics',
+                                        'Deciduous Broadleaf Forests',
+                                        'Deciduous Needleleaf Forests',
+                                        'Evergreen Broadleaf Forests',
+                                        'Evergreen Needleleaf Forests',
+                                        'Grasslands',
+                                        'Mixed Forests',
+                                        'Open Shrublands',
+                                        'Savannas',
+                                        'Snow and Ice',
+                                        'Urband and Built-Up Lands',
+                                        'Water Bodies',
+                                        'Permanent Wetlands',
+                                        'Woody Savannas'))
+
+# Subset BADM IGBP variables
+badm.igbp = badm[badm$VARIABLE == 'IGBP',]
+
+amf.site.locs.igbp = amf.site.locs[amf.site.locs$Country %in% c('USA','CA'),]
+
+amf.site.locs.igbp = amf.site.locs[amf.site.locs.igbp$SiteID %in% badm.igbp$SITE_ID,]
+
