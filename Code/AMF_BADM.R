@@ -55,9 +55,13 @@ site_id_summaryKEY = filtered_data %>%
   group_by(VARIABLE) %>%
   summarise(UniqueSiteIDs = n_distinct(SITE_ID), .groups = 'drop')
 
+# Get state names for each site
+badm.states = badm[badm$VARIABLE == 'STATE',]
 
 # Mapping function (requires 'variable.name' input included within selected_variables)
-map.amf.variable = function(variable.name) {
+# For CONUS maps, use region = 'CONUS'
+# For Alaska/Canada maps, use region = 'Alaska/Canada'
+map.amf.variable = function(variable.name, region) {
   
   # Subset filtered data by variable name (or variable group for LAI)
   if (variable.name == 'LAI') {
@@ -72,28 +76,40 @@ map.amf.variable = function(variable.name) {
     group_by(SITE_ID) %>%
     summarise(Var_count = sum(VarGroup_Int))
   
-  # Filter site locations (all AMF sites) to include USA-only sites that contain the specified variable 
+  # Filter site locations (all AMF sites) to include sites that contain the specified variable 
   var.site.locs = amf.site.locs[match(var$SITE_ID, amf.site.locs$SiteID),]
   
-  # Bind columns from filtered site lon/lat coordinates to the summarized data frame
+  # Bind columns from filtered site lon/lat coordinates and BADM states to the variable summarized data frame
   var = cbind(var, var.site.locs[,2:4])
-  var = var[var$Country == 'USA',]
+  
+  # Filter spatially
+  if (region == 'CONUS') {var = var[var$Country == 'USA',]}
+  if (region == 'Alaska/Canada') {var = var[var$Country %in% c('USA','Canada'),]}
+  
+  # Convert lat/lon values to numeric values
   var$lon = as.numeric(var$lon)
   var$lat = as.numeric(var$lat)
   
-  # Filter AMF site locations for USA-only sites
-  usa.locs = amf.site.locs[amf.site.locs$Country == 'USA',]
-  usa.locs$lon = as.numeric(usa.locs$lon)
-  usa.locs$lat = as.numeric(usa.locs$lat)
+  # Filter AMF site locations 
+  if (region == 'CONUS') { amf.locs = amf.site.locs[amf.site.locs$Country == 'USA',] }
+  if (region == 'Alaska/Canada') { amf.locs = amf.site.locs[amf.site.locs$Country %in% c('USA','Canada'),] }
   
-  # Get state polygons
+  # Convert lat/lon values to numeric values
+  amf.locs$lon = as.numeric(amf.locs$lon)
+  amf.locs$lat = as.numeric(amf.locs$lat)
+  
+  # Filter BADM state info to match site IDs in var.site.locs
+  badm.states.var = na.omit(badm.states[match(amf.locs$SiteID, badm.states$SITE_ID),])
+  
+  # Get state and country polygons for mapping
   state.polys = map_data('state')
+  country.polys = map_data('world', xlim = c(-170,-65), ylim = c(17,70))
   
   # Generate map
   var.map = ggplot() +
     geom_polygon(data = state.polys, aes(x = long, y = lat, group = group), fill = NA, color = 'black') +
     geom_point(data = var, aes(x = lon, y = lat), fill = 'red', color = 'black', shape = 21, alpha = 0.25, size = 10) +
-    geom_point(data = usa.locs, aes(x = lon, y = lat), col = 'black', size = 2) +
+    geom_point(data = amf.locs, aes(x = lon, y = lat), col = 'black', size = 2) +
     coord_map(xlim = c(-125,-68), ylim = c(25,49)) +
     theme_void() +
     ggtitle(variable.name) +
@@ -103,9 +119,13 @@ map.amf.variable = function(variable.name) {
   
   var.map
   
-  ggsave(filename = paste0(plots.fp, '/SiteVariables/', variable.name, '_BADM_Map.png'),
+  ggsave(filename = paste0(plots.fp, '/SiteVariables/CONUS/', variable.name, '_BADM_Map.png'),
          plot = var.map,
          width = 6, height = 5)
+  
+  
+  
+  
 }
 
 
