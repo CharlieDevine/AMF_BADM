@@ -252,7 +252,6 @@ colnames(badm.igbp.sites)[5] = 'IGBP_Class'
 igbp.group.fun = function() {
   df.out = badm.igbp.sites
   df.out$IGBP_Group = NA
-  
   df.out[df.out$IGBP_Class %in% c('DBF','EBF','ENF','MF'), 10] = 'Forest sites'
   df.out[df.out$IGBP_Class %in% c('CSH','OSH'), 10] = 'Shrub sites'
   df.out[df.out$IGBP_Class %in% c('CRO','CVM'), 10] = 'Crop sites'
@@ -261,14 +260,13 @@ igbp.group.fun = function() {
   df.out[df.out$IGBP_Class %in% c('BSV','SNO'), 10] = 'Low-veg. sites'
   df.out[df.out$IGBP_Class %in% c('URB'), 10] = 'Urban sites'
   df.out[df.out$IGBP_Class %in% c('GRA'), 10] = 'Grassland sites'
-  
   return(df.out)
 }
 
 # Run function
 badm.igbp.sites = igbp.group.fun()
 
-# Set IGBP_Class to factor
+# Factor IGBP_Class 
 badm.igbp.sites$IGBP_Class = factor(badm.igbp.sites$IGBP_Class, levels = sort(unique(badm.igbp.sites$IGBP_Class)))
 
 # Plot map showing site locations symbolize by IGBP cover class
@@ -277,14 +275,16 @@ igbp.cols = unname(dark.colors(n = length(unique(badm.igbp.sites$IGBP_Class))))
 
 igbp.class.labs = igbp.class[igbp.class$ClassID %in% unique(badm.igbp.sites$IGBP_Class),]
 
+# Generate map for North America
 igbp.map = ggplot() +
   geom_polygon(data = country.polys, 
                aes(x = long, y = lat, group = group), 
                fill = NA, color = 'black') +
   geom_point(data = badm.igbp.sites,
              aes(x = lon, y = lat, color = IGBP_Class, shape = IGBP_Group), 
-             alpha = 0.5, size = 1.5) +
+             alpha = 1, size = 1.5) +
   scale_color_manual(values = igbp.cols, labels = igbp.class.labs$ClassName) +
+  scale_shape_manual(values = seq(1,8,1)) +
   coord_map(xlim = c(-170,-62), ylim = c(17,70)) +
   theme_bw() +
   ggtitle('IGBP cover classes for North American Ameriflux sites') +
@@ -296,4 +296,26 @@ igbp.map = ggplot() +
 
 ggsave(filename = paste0(plots.fp, '/IGBP/', 'IGBP_NorthAmerica.png'),
        igbp.map,
-       width = 8, height = 8)
+       width = 10, height = 7)
+
+# Generate map for everything north of 50 deg.
+igbp.map.n50 = ggplot() +
+  geom_polygon(data = country.polys, 
+               aes(x = long, y = lat, group = group), 
+               fill = NA, color = 'black') +
+  geom_point(data = badm.igbp.sites,
+             aes(x = lon, y = lat, color = IGBP_Class, shape = IGBP_Group), 
+             alpha = 1, size = 1.5) +
+  scale_color_manual(values = igbp.cols, labels = igbp.class.labs$ClassName) +
+  scale_shape_manual(values = seq(1,8,1)) +
+  coord_map(xlim = c(-170,-62), ylim = c(50,70)) +
+  theme_bw() +
+  ggtitle('IGBP cover classes for North American Ameriflux sites') +
+  theme(axis.title = element_blank(),
+        plot.title = element_text(size = 12, face = 'bold', hjust = 0.5),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 12),
+        plot.background = element_rect(fill = 'white', color = 'white'))
+
+igbp.map.n50
+
