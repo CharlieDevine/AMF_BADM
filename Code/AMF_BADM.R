@@ -3,6 +3,7 @@ library(dplyr)
 library(sf)
 library(mapview)
 library(ggplot2)
+library(Polychrome)
 
 setwd('../')
 git.fp = getwd()
@@ -230,7 +231,69 @@ igbp.class = data.frame('ClassID' = c('BSV',
 # Subset BADM IGBP variables
 badm.igbp = badm[badm$VARIABLE == 'IGBP',]
 
-amf.site.locs.igbp = amf.site.locs[amf.site.locs$Country %in% c('USA','CA'),]
+# Filter site locations by matching SITE_ID characters in badm.igbp
+amf.site.locs.igbp = amf.site.locs[amf.site.locs$SiteID %in% badm.igbp$SITE_ID,]
 
-amf.site.locs.igbp = amf.site.locs[amf.site.locs.igbp$SiteID %in% badm.igbp$SITE_ID,]
+# Remove duplicate sites from badm.igbp
+badm.igbp = badm.igbp[!duplicated(badm.igbp$SITE_ID),]
 
+# Combine in single data frame
+badm.igbp.sites = cbind(badm.igbp, amf.site.locs.igbp)
+badm.igbp.sites$lon = as.numeric(badm.igbp.sites$lon)
+badm.igbp.sites$lat = as.numeric(badm.igbp.sites$lat)
+
+# Filter sites in North America only
+badm.igbp.sites = badm.igbp.sites[badm.igbp.sites$Country %in% c('USA','Canada','Mexico','Panama','Puerto Rico','Costa Rica'),]
+
+# Rename IGBP class column to "IGBP_Class
+colnames(badm.igbp.sites)[5] = 'IGBP_Class'
+
+# Create category for grouping similar IGBP_Class types
+igbp.group.fun = function() {
+  df.out = badm.igbp.sites
+  df.out$IGBP_Group = NA
+  
+  df.out[df.out$IGBP_Class %in% c('DBF','EBF','ENF','MF'), 10] = 'Forest sites'
+  df.out[df.out$IGBP_Class %in% c('CSH','OSH'), 10] = 'Shrub sites'
+  df.out[df.out$IGBP_Class %in% c('CRO','CVM'), 10] = 'Crop sites'
+  df.out[df.out$IGBP_Class %in% c('SAV','WSA'), 10] = 'Savanna sites'
+  df.out[df.out$IGBP_Class %in% c('WAT','WET'), 10] = 'Wet sites'
+  df.out[df.out$IGBP_Class %in% c('BSV','SNO'), 10] = 'Low-veg. sites'
+  df.out[df.out$IGBP_Class %in% c('URB'), 10] = 'Urban sites'
+  df.out[df.out$IGBP_Class %in% c('GRA'), 10] = 'Grassland sites'
+  
+  return(df.out)
+}
+
+# Run function
+badm.igbp.sites = igbp.group.fun()
+
+# Set IGBP_Class to factor
+badm.igbp.sites$IGBP_Class = factor(badm.igbp.sites$IGBP_Class, levels = sort(unique(badm.igbp.sites$IGBP_Class)))
+
+# Plot map showing site locations symbolize by IGBP cover class
+country.polys = map_data('world', xlim = c(-170,-65), ylim = c(17,70))
+igbp.cols = unname(dark.colors(n = length(unique(badm.igbp.sites$IGBP_Class))))
+
+igbp.class.labs = igbp.class[igbp.class$ClassID %in% unique(badm.igbp.sites$IGBP_Class),]
+
+igbp.map = ggplot() +
+  geom_polygon(data = country.polys, 
+               aes(x = long, y = lat, group = group), 
+               fill = NA, color = 'black') +
+  geom_point(data = badm.igbp.sites,
+             aes(x = lon, y = lat, color = IGBP_Class, shape = IGBP_Group), 
+             alpha = 0.5, size = 1.5) +
+  scale_color_manual(values = igbp.cols, labels = igbp.class.labs$ClassName) +
+  coord_map(xlim = c(-170,-62), ylim = c(17,70)) +
+  theme_bw() +
+  ggtitle('IGBP cover classes for North American Ameriflux sites') +
+  theme(axis.title = element_blank(),
+        plot.title = element_text(size = 12, face = 'bold', hjust = 0.5),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 12),
+        plot.background = element_rect(fill = 'white', color = 'white'))
+
+ggsave(filename = paste0(plots.fp, '/IGBP/', 'IGBP_NorthAmerica.png'),
+       igbp.map,
+       width = 8, height = 8)
