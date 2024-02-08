@@ -15,6 +15,8 @@ amf.sitelist = amf_sites()
 amf.site.ids = amf.sitelist$SITE_ID
 amf.site.locs = amf.sitelist[,c(1,3,10,9)]
 colnames(amf.site.locs) = c('SiteID','Country','lon','lat')
+ca.ak.site.ids = c(as.vector(amf.sitelist[amf.sitelist$COUNTRY == 'Canada',1]),
+                   na.omit(as.vector(amf.sitelist[amf.sitelist$STATE == 'AK',1])))
 
 # # Convert lat/lon locations simple feature (sf)
 # amf.site.locs.sf = st_as_sf(x = amf.site.locs,
@@ -50,14 +52,6 @@ selected_variables = c('LAI', 'BASAL_AREA', 'TREES_NUM', 'AG_BIOMASS_TREE',
 filtered_data = badm %>%
   filter(VARIABLE %in% selected_variables, as.numeric(DATAVALUE) != 0, !is.na(as.numeric(DATAVALUE)))
 
-# Summarize the number of unique SITE_IDs for each VARIABLE
-site_id_summaryKEY = filtered_data %>%
-  group_by(VARIABLE) %>%
-  summarise(UniqueSiteIDs = n_distinct(SITE_ID), .groups = 'drop')
-
-# Get state names for each site
-badm.states = badm[badm$VARIABLE == 'STATE',]
-
 # Mapping function (requires 'variable.name' input included within selected_variables)
 # For CONUS maps, use region = 'CONUS'
 # For Alaska/Canada maps, use region = 'Alaska/Canada'
@@ -82,56 +76,75 @@ map.amf.variable = function(variable.name, region) {
   # Bind columns from filtered site lon/lat coordinates and BADM states to the variable summarized data frame
   var = cbind(var, var.site.locs[,2:4])
   
-  # Filter spatially
-  if (region == 'CONUS') {var = var[var$Country == 'USA',]}
-  if (region == 'Alaska/Canada') {var = var[var$Country %in% c('USA','Canada'),]}
-  
   # Convert lat/lon values to numeric values
   var$lon = as.numeric(var$lon)
   var$lat = as.numeric(var$lat)
   
+  # Filter spatially
+  if (region == 'CONUS') {var = var[var$Country == 'USA',]}
+  if (region == 'Alaska/Canada') {
+    var = var[var$SITE_ID %in% ca.ak.site.ids,]
+    }
+  
   # Filter AMF site locations 
-  if (region == 'CONUS') { amf.locs = amf.site.locs[amf.site.locs$Country == 'USA',] }
-  if (region == 'Alaska/Canada') { amf.locs = amf.site.locs[amf.site.locs$Country %in% c('USA','Canada'),] }
+  if (region == 'CONUS') { all.site.locs = amf.site.locs[amf.site.locs$Country == 'USA',] }
+  if (region == 'Alaska/Canada') { all.site.locs = amf.site.locs[amf.site.locs$Country %in% c('USA','Canada'),] }
   
   # Convert lat/lon values to numeric values
-  amf.locs$lon = as.numeric(amf.locs$lon)
-  amf.locs$lat = as.numeric(amf.locs$lat)
+  all.site.locs$lon = as.numeric(all.site.locs$lon)
+  all.site.locs$lat = as.numeric(all.site.locs$lat)
   
-  # Filter BADM state info to match site IDs in var.site.locs
-  badm.states.var = na.omit(badm.states[match(amf.locs$SiteID, badm.states$SITE_ID),])
+  if (region == 'Alaska/Canada') {all.site.locs = all.site.locs[all.site.locs$SiteID %in% ca.ak.site.ids,]}
   
   # Get state and country polygons for mapping
   state.polys = map_data('state')
   country.polys = map_data('world', xlim = c(-170,-65), ylim = c(17,70))
   
-  # Generate map
-  var.map = ggplot() +
-    geom_polygon(data = state.polys, aes(x = long, y = lat, group = group), fill = NA, color = 'black') +
-    geom_point(data = var, aes(x = lon, y = lat), fill = 'red', color = 'black', shape = 21, alpha = 0.25, size = 10) +
-    geom_point(data = amf.locs, aes(x = lon, y = lat), col = 'black', size = 2) +
-    coord_map(xlim = c(-125,-68), ylim = c(25,49)) +
-    theme_void() +
-    ggtitle(variable.name) +
-    theme(axis.title = element_blank(),
-          plot.title = element_text(size = 25, face = 'bold', hjust = 0.5),
-          plot.background = element_rect(fill = 'white', color = 'white'))
+  # Generate map and save output PNGs
+  if (region == 'CONUS') {
+    var.map = ggplot() +
+      geom_polygon(data = state.polys, aes(x = long, y = lat, group = group), fill = NA, color = 'black') +
+      geom_point(data = var, aes(x = lon, y = lat), fill = 'red', color = 'black', shape = 21, alpha = 0.25, size = 10) +
+      geom_point(data = all.site.locs, aes(x = lon, y = lat), col = 'black', size = 2) +
+      coord_map(xlim = c(-125,-68), ylim = c(25,49)) +
+      theme_bw() +
+      ggtitle(variable.name) +
+      theme(axis.title = element_blank(),
+            plot.title = element_text(size = 25, face = 'bold', hjust = 0.5),
+            plot.background = element_rect(fill = 'white', color = 'white'))
+    
+    var.map
+    
+    ggsave(filename = paste0(plots.fp, '/SiteVariables/CONUS/', variable.name, '_BADM_Map_CONUS.png'),
+           plot = var.map,
+           width = 6, height = 5)
+  }
   
-  var.map
-  
-  ggsave(filename = paste0(plots.fp, '/SiteVariables/CONUS/', variable.name, '_BADM_Map.png'),
-         plot = var.map,
-         width = 6, height = 5)
-  
-  
-  
-  
+  if (region == 'Alaska/Canada') {
+    var.map = ggplot() +
+      geom_polygon(data = country.polys, aes(x = long, y = lat, group = group), fill = NA, color = 'black') +
+      geom_point(data = var, aes(x = lon, y = lat), fill = 'red', color = 'black', shape = 21, alpha = 0.25, size = 10) +
+      geom_point(data = all.site.locs, aes(x = lon, y = lat), col = 'black', size = 2) +
+      coord_map(xlim = c(-168,-60), ylim = c(41,70)) +
+      theme_bw() +
+      ggtitle(variable.name) +
+      theme(axis.title = element_blank(),
+            plot.title = element_text(size = 25, face = 'bold', hjust = 0.5),
+            plot.background = element_rect(fill = 'white', color = 'white'))
+    
+    var.map
+    
+    ggsave(filename = paste0(plots.fp, '/SiteVariables/Alaska_Canada/', variable.name, '_BADM_Map_AK_CA.png'),
+           plot = var.map,
+           width = 6, height = 4)
+  }
 }
 
 
 # Run mapping function for all variables specified in select_variables
 for (i in 1 : length(selected_variables)) {
-  map.amf.variable(selected_variables[i])
+  map.amf.variable(selected_variables[i], 'CONUS')
+  map.amf.variable(selected_variables[i], 'Alaska/Canada')
 }
 
 
@@ -152,7 +165,9 @@ dm.vars = unique(badm.dm$VARIABLE)
 dm.vars = dm.vars[grep('DM_SURF', dm.vars, invert = TRUE)]
 
 # Mapping function (requires 'dm.variable.name')
-map.dm.function = function(dm.variable.name) {
+# For CONUS maps, use region = 'CONUS'
+# For Alaska/Canada maps, use region = 'Alaska/Canada'
+map.dm.function = function(dm.variable.name, region) {
   
   # Set disturbance (DM) variable 
   dm.var = dm.variable.name
@@ -165,47 +180,87 @@ map.dm.function = function(dm.variable.name) {
   
   # Bind columns from filtered site lon/lat coordinates to the filtered DM data frame, select USA-only instances
   dm = cbind(dm, dm.site.locs[,2:4])
-  dm = dm[dm$Country == 'USA',]
   dm$lon = as.numeric(dm$lon)
   dm$lat = as.numeric(dm$lat)
   
-  # Filter AMF site locations for USA-only sites
-  usa.locs = amf.site.locs[amf.site.locs$Country == 'USA',]
-  usa.locs$lon = as.numeric(usa.locs$lon)
-  usa.locs$lat = as.numeric(usa.locs$lat)
+  # Filter according to specified region
+  if (region == 'CONUS') {dm = dm[dm$Country == 'USA',]}
+  if (region == 'Alaska/Canada') {dm = dm[dm$SITE_ID %in% ca.ak.site.ids,]}
   
-  # Get state polygons
+  # Filter AMF site locations 
+  if (region == 'CONUS') { all.site.locs = amf.site.locs[amf.site.locs$Country == 'USA',] }
+  if (region == 'Alaska/Canada') { all.site.locs = amf.site.locs[amf.site.locs$Country %in% c('USA','Canada'),] }
+  
+  # Convert lat/lon values to numeric values
+  all.site.locs$lon = as.numeric(all.site.locs$lon)
+  all.site.locs$lat = as.numeric(all.site.locs$lat)
+  
+  if (region == 'Alaska/Canada') {all.site.locs = all.site.locs[all.site.locs$SiteID %in% ca.ak.site.ids,]}
+  
+  # Get state and country polygons for mapping
   state.polys = map_data('state')
+  country.polys = map_data('world', xlim = c(-170,-65), ylim = c(17,70))
   
   # Generate map for selected DM variable symbolizing specific disturbance categories
-  dm.map = ggplot() +
-    geom_polygon(data = state.polys, aes(x = long, y = lat, group = group), fill = NA, color = 'black') +
-    geom_point(data = dm, aes(x = lon, y = lat, fill = DATAVALUE, shape = DATAVALUE), color = 'black', alpha = 0.5, size = 10) +
-    scale_shape_manual(values = c(21,22,23,24)) +
-    geom_point(data = usa.locs, aes(x = lon, y = lat), col = 'black', size = 2) +
-    coord_map(xlim = c(-125,-68), ylim = c(25,49)) +
-    theme_void() +
-    ggtitle(dm.var) +
-    theme(axis.title = element_blank(),
-          plot.title = element_text(size = 25, face = 'bold', hjust = 0.5),
-          legend.title = element_blank(),
-          legend.position = 'bottom',
-          #legend.position = c(0,0),
-          #legend.justification = c('left','bottom'),
-          #legend.box.just = 'right',
-          legend.text = element_text(size = 10),
-          plot.background = element_rect(fill = 'white', color = 'white'))
+  if (region == 'CONUS') {
+    
+    dm.map = ggplot() +
+      geom_polygon(data = state.polys, aes(x = long, y = lat, group = group), fill = NA, color = 'black') +
+      geom_point(data = dm, aes(x = lon, y = lat, fill = DATAVALUE, shape = DATAVALUE), color = 'black', alpha = 0.5, size = 10) +
+      scale_shape_manual(values = c(21,22,23,24)) +
+      geom_point(data = all.site.locs, aes(x = lon, y = lat), col = 'black', size = 2) +
+      coord_map(xlim = c(-125,-68), ylim = c(25,49)) +
+      theme_bw() +
+      ggtitle(dm.var) +
+      theme(axis.title = element_blank(),
+            plot.title = element_text(size = 25, face = 'bold', hjust = 0.5),
+            legend.title = element_blank(),
+            legend.position = 'bottom',
+            #legend.position = c(0,0),
+            #legend.justification = c('left','bottom'),
+            #legend.box.just = 'right',
+            legend.text = element_text(size = 10),
+            plot.background = element_rect(fill = 'white', color = 'white'))
+    
+    dm.map
+    
+    ggsave(filename =  paste0(plots.fp, '/Disturbance/CONUS/', dm.variable.name, '_BADM_Map_CONUS.png'),
+           dm.map,
+           width = 8, height = 5)
+  }
   
-  dm.map
-  
-  ggsave(filename =  paste0(plots.fp, '/Disturbance/', dm.variable.name, '_BADM_Map.png'),
-         dm.map,
-         width = 8, height = 5)
+  if (region == 'Alaska/Canada') {
+    
+    dm.map = ggplot() +
+      geom_polygon(data = country.polys, aes(x = long, y = lat, group = group), fill = NA, color = 'black') +
+      geom_point(data = dm, aes(x = lon, y = lat, fill = DATAVALUE, shape = DATAVALUE), color = 'black', alpha = 0.5, size = 10) +
+      scale_shape_manual(values = c(21,22,23,24)) +
+      geom_point(data = all.site.locs, aes(x = lon, y = lat), col = 'black', size = 2) +
+      coord_map(xlim = c(-168,-60), ylim = c(41,70)) +
+      theme_bw() +
+      ggtitle(dm.var) +
+      theme(axis.title = element_blank(),
+            plot.title = element_text(size = 25, face = 'bold', hjust = 0.5),
+            legend.title = element_blank(),
+            legend.position = 'bottom',
+            #legend.position = c(0,0),
+            #legend.justification = c('left','bottom'),
+            #legend.box.just = 'right',
+            legend.text = element_text(size = 10),
+            plot.background = element_rect(fill = 'white', color = 'white'))
+    
+    dm.map
+    
+    ggsave(filename =  paste0(plots.fp, '/Disturbance/Alaska_Canada/', dm.variable.name, '_BADM_Map_AK_CA.png'),
+           dm.map,
+           width = 8, height = 4)
+  }
 }
 
 
 for (i in 1 : length(dm.vars)) {
-  map.dm.function(dm.vars[i])
+  #map.dm.function(dm.vars[i], 'CONUS')
+  map.dm.function(dm.vars[i], 'Alaska/Canada')
 }
 
 # ---------------------------------------------------------------------------------------
@@ -291,8 +346,9 @@ badm.igbp.sites$IGBP_Class = factor(badm.igbp.sites$IGBP_Class, levels = sort(un
 
 # Plot map showing site locations symbolize by IGBP cover class
 country.polys = map_data('world', xlim = c(-170,-65), ylim = c(17,70))
-igbp.cols = unname(dark.colors(n = length(unique(badm.igbp.sites$IGBP_Class))))
 
+# Assign IGBP colors and labels
+igbp.cols = unname(dark.colors(n = length(unique(badm.igbp.sites$IGBP_Class))))
 igbp.class.labs = igbp.class[igbp.class$ClassID %in% unique(badm.igbp.sites$IGBP_Class),]
 
 # Generate map for North America
@@ -319,23 +375,36 @@ ggsave(filename = paste0(plots.fp, '/IGBP/', 'IGBP_NorthAmerica.png'),
        width = 10, height = 7)
 
 # Generate map for everything north of 50 deg.
+badm.igbp.ca.ak = badm.igbp.sites[badm.igbp.sites$SITE_ID %in% ca.ak.site.ids,]
+
 igbp.map.n50 = ggplot() +
   geom_polygon(data = country.polys, 
                aes(x = long, y = lat, group = group), 
-               fill = NA, color = 'black') +
-  geom_point(data = badm.igbp.sites,
-             aes(x = lon, y = lat, color = IGBP_Class, shape = IGBP_Group), 
-             alpha = 1, size = 1.5) +
+               fill = NA, color = rgb(0,0,0,0.5)) +
+  geom_point(data = badm.igbp.ca.ak,
+             aes(x = lon, y = lat, color = IGBP_Class, shape = IGBP_Class), 
+             alpha = 1, size = 9) +
+  geom_point(data = badm.igbp.ca.ak,
+             aes(x = lon, y = lat), 
+             inherit.aes = FALSE,
+             color = 'black', size = 0.5) +
   scale_color_manual(values = igbp.cols, labels = igbp.class.labs$ClassName) +
-  scale_shape_manual(values = seq(1,8,1)) +
-  coord_map(xlim = c(-170,-62), ylim = c(50,70)) +
+  scale_shape_manual(values = seq(1,9,1), labels = igbp.class.labs$ClassName) +
+  coord_map(xlim = c(-168,-60), ylim = c(42,71)) +
   theme_bw() +
-  ggtitle('IGBP cover classes for North American Ameriflux sites') +
+  ggtitle('IGBP cover classes for Ameriflux sites in Alaska and Canada') +
   theme(axis.title = element_blank(),
-        plot.title = element_text(size = 12, face = 'bold', hjust = 0.5),
+        axis.text = element_text(size = 18),
+        plot.title = element_text(size = 30, face = 'bold', hjust = 0.5),
+        legend.position = 'bottom',
+        legend.direction = 'horizontal',
         legend.title = element_blank(),
-        legend.text = element_text(size = 12),
-        plot.background = element_rect(fill = 'white', color = 'white'))
+        legend.text = element_text(size = 18),
+        plot.background = element_rect(fill = 'white', color = 'white'),
+        aspect.ratio = 2/5)
 
 igbp.map.n50
 
+ggsave(filename = paste0(plots.fp, '/IGBP/', 'IGBP_Alaska_Canada.png'),
+       igbp.map.n50,
+       width = 19, height = 9)
