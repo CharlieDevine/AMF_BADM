@@ -259,7 +259,7 @@ map.dm.function = function(dm.variable.name, region) {
 
 
 for (i in 1 : length(dm.vars)) {
-  #map.dm.function(dm.vars[i], 'CONUS')
+  map.dm.function(dm.vars[i], 'CONUS')
   map.dm.function(dm.vars[i], 'Alaska/Canada')
 }
 
@@ -298,10 +298,14 @@ igbp.class = data.frame('ClassID' = c('BSV',
                                         'Open Shrublands',
                                         'Savannas',
                                         'Snow and Ice',
-                                        'Urband and Built-Up Lands',
+                                        'Urban and Built-Up Lands',
                                         'Water Bodies',
                                         'Permanent Wetlands',
                                         'Woody Savannas'))
+
+# Set IGBP class colors
+igbp.cols = unname(dark.colors(n = 17))
+igbp.class$ClassColor = igbp.cols
 
 # Subset BADM IGBP variables
 badm.igbp = badm[badm$VARIABLE == 'IGBP',]
@@ -347,9 +351,9 @@ badm.igbp.sites$IGBP_Class = factor(badm.igbp.sites$IGBP_Class, levels = sort(un
 # Plot map showing site locations symbolize by IGBP cover class
 country.polys = map_data('world', xlim = c(-170,-65), ylim = c(17,70))
 
-# Assign IGBP colors and labels
-igbp.cols = unname(dark.colors(n = length(unique(badm.igbp.sites$IGBP_Class))))
-igbp.class.labs = igbp.class[igbp.class$ClassID %in% unique(badm.igbp.sites$IGBP_Class),]
+# Assign site IGBP colors and labels
+igbp.site.cols = igbp.class[igbp.class$ClassID %in% unique(badm.igbp.sites$IGBP_Class),3]
+igbp.site.labs = igbp.class[igbp.class$ClassID %in% unique(badm.igbp.sites$IGBP_Class),2]
 
 # Generate map for North America
 igbp.map = ggplot() +
@@ -358,8 +362,8 @@ igbp.map = ggplot() +
                fill = NA, color = 'black') +
   geom_point(data = badm.igbp.sites,
              aes(x = lon, y = lat, color = IGBP_Class, shape = IGBP_Group), 
-             alpha = 1, size = 1.5) +
-  scale_color_manual(values = igbp.cols, labels = igbp.class.labs$ClassName) +
+             alpha = 1, size = 1.5, stroke = 1.25) +
+  scale_color_manual(values = igbp.site.cols, labels = igbp.site.labs) +
   scale_shape_manual(values = seq(1,8,1)) +
   coord_map(xlim = c(-170,-62), ylim = c(17,70)) +
   theme_bw() +
@@ -377,19 +381,23 @@ ggsave(filename = paste0(plots.fp, '/IGBP/', 'IGBP_NorthAmerica.png'),
 # Generate map for everything north of 50 deg.
 badm.igbp.ca.ak = badm.igbp.sites[badm.igbp.sites$SITE_ID %in% ca.ak.site.ids,]
 
+# Assign n50 site colors and labels
+igbp.n50.cols = igbp.class[igbp.class$ClassID %in% unique(badm.igbp.ca.ak$IGBP_Class),3]
+igbp.n50.labs = igbp.class[igbp.class$ClassID %in% unique(badm.igbp.ca.ak$IGBP_Class),2]
+
 igbp.map.n50 = ggplot() +
   geom_polygon(data = country.polys, 
                aes(x = long, y = lat, group = group), 
-               fill = NA, color = rgb(0,0,0,0.5)) +
+               fill = NA, color = rgb(0,0,0,1)) +
   geom_point(data = badm.igbp.ca.ak,
              aes(x = lon, y = lat, color = IGBP_Class, shape = IGBP_Class), 
-             alpha = 1, size = 9) +
+             alpha = 1, size = 9, stroke = 1.5) +
   geom_point(data = badm.igbp.ca.ak,
              aes(x = lon, y = lat), 
              inherit.aes = FALSE,
              color = 'black', size = 0.5) +
-  scale_color_manual(values = igbp.cols, labels = igbp.class.labs$ClassName) +
-  scale_shape_manual(values = seq(1,9,1), labels = igbp.class.labs$ClassName) +
+  scale_color_manual(values = igbp.n50.cols, labels = igbp.n50.labs) +
+  scale_shape_manual(values = seq(1,9,1), labels = igbp.n50.labs) +
   coord_map(xlim = c(-168,-60), ylim = c(42,71)) +
   theme_bw() +
   ggtitle('IGBP cover classes for Ameriflux sites in Alaska and Canada') +
